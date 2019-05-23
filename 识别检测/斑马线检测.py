@@ -5,14 +5,14 @@ import numpy as np
 
 
 blur_ksize = 5  # Gaussian blur kernel size
-canny_lthreshold = 50  # Canny edge detection low threshold
-canny_hthreshold = 150  # Canny edge detection high threshold
+canny_lthreshold = 100  # Canny edge detection low threshold
+canny_hthreshold = 220  # Canny edge detection high threshold
 # Hough transform parameters
-rho = 1
+rho = 1.0
 theta = np.pi / 180
-threshold = 15
+threshold = 90
 min_line_length = 40
-max_line_gap = 20
+max_line_gap = 40
 
 
 
@@ -30,31 +30,28 @@ def hough_lines(img, rho, theta, threshold,
 def draw_lanes(img, lines, color=[255, 0, 0], thickness=2):
     total_lines = []
     total_distance = np.array([])
-    k=0
+    total_k = np.array([])
     for line in lines:
-        k += 1
-        print(k)
         for x1, y1, x2, y2 in line:
-            d = linespace(x1, y1, x2, y2)
+            d, k= linespace(x1, y1, x2, y2)
             if  total_lines == []:
-                local_lines = np.array([[x1,y1,x2,y2]])
-                total_lines.append(local_lines)
+                total_lines.append([[x1, y1, x2, y2]])
                 total_distance = np.append(total_distance, d)
+                total_k = np.append(total_k, k)
             else:
                 for i in range(0, len(total_distance)):
-                    if abs(total_distance[i]-d) < 0.3:
-                        total_lines[i] = np.append(total_lines[i],[[x1, y1, x2, y2]],axis=0)
-                    else:
-                        total_distance = np.append(total_distance, d)
-                        total_lines.append(np.array([[x1,y1,x2,y2]]))
+                    if (abs(total_distance[i]-d) < 5) and (abs(total_k[i]-k) < 1):
+                        total_lines[i].append([x1, y1, x2, y2])
+                else:
+                    total_distance = np.append(total_distance, d)
+                    total_k = np.append(total_k, k)
+                    total_lines.append([[x1, y1, x2, y2]])
     print('分组完成')
     for singal_line in total_lines:
-        left_points = [(x1, y1)
-                       for line in singal_line for x1, y1, x2, y2 in line]
-        left_points = left_points + \
-            [(x2, y2) for line in singal_line for x1, y1, x2, y2 in line]
+        left_points = [(line1[0],line1[1]) for line1 in singal_line ]
+        left_points = left_points + [(line1[2],line1[3]) for line1 in singal_line ]
 
-        left_vtx = calc_lane_vertices(left_points, 325, img.shape[0])
+        left_vtx = calc_lane_vertices(left_points)
 
         cv2.line(img, left_vtx[0], left_vtx[1], color, thickness)
 
@@ -62,48 +59,38 @@ def draw_lanes(img, lines, color=[255, 0, 0], thickness=2):
 def linespace(x1, y1, x2, y2):
     k = (y2-y1)/(x2-x1)
     d = abs((k*x1-y1)/(k**2+1)**(0.5))
-    return d
+    try:
+        theta_k = np.arctan(-1/k)
+    except:
+        theta_k = np.pi/2
+    return d, theta_k
 
 
-def calc_lane_vertices(point_list, ymin, ymax):
+def calc_lane_vertices(point_list):
     x = [p[0] for p in point_list]
     y = [p[1] for p in point_list]
-    fit = np.polyfit(y, x, 1)
+    fit = np.polyfit(x, y, 1)
     fit_fn = np.poly1d(fit)
-    xmin = int(fit_fn(ymin))
-    xmax = int(fit_fn(ymax))
+    xmin = min(x)
+    xmax = max(x)
+
+    ymin = int(fit_fn(xmin))
+    ymax = int(fit_fn(xmax))
     return [(xmin, ymin), (xmax, ymax)]
 
 if __name__ == "__main__":
 
     img = mplimg.imread('./images/01.jpg')
+    plt.imshow(img)
+    plt.show()
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     blur_gray = cv2.GaussianBlur(gray, (blur_ksize, blur_ksize), 0, 0)
     edges = cv2.Canny(blur_gray, canny_lthreshold, canny_hthreshold)
-    line_img = hough_lines(edges, rho, theta, threshold,
-                        min_line_length, max_line_gap)
+    line_img = hough_lines(edges, rho, theta, threshold, min_line_length, max_line_gap)
 
-    plt.imshow(line_img)
+    
+    res_img = cv2.addWeighted(img, 0.8, line_img, 1, 0)
+    plt.imshow(res_img)
     plt.show()
+ 
 
-
-# def clean_lines(lines, threshold):
-#     slope = [(y2 - y1) / (x2 - x1)
-#              for line in lines for x1, y1, x2, y2 in line]
-#     while len(lines) > 0:
-#         mean = np.mean(slope)
-#         diff = [abs(s - mean) for s in slope]
-#         idx = np.argmax(diff)
-#         if diff[idx] > threshold:
-#             slope.pop(idx)
-#             lines.pop(idx)
-#         else:
-#             break
-
-
-# def roi_mask(img, vertices):
-#     mask = np.zeros_like(img)
-#     mask_color = 255
-#     cv2.fillPoly(mask, vertices, mask_color)
-#     masked_img = cv2.bitwise_and(img, mask)
-#     return masked_img
