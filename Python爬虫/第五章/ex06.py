@@ -1,5 +1,5 @@
 import pymongo
-
+import random
 client = pymongo.MongoClient(host='47.106.109.80',port=27017)
 db = client.test
 collection = db.students
@@ -58,7 +58,8 @@ for student3 in results3:
 
 
 # 计数 count()方法
-count = collection.find().count()
+count = collection.find()
+count  = count.count()
 print(count)
 count = collection.find({'age': 20}).count()
 print(count)
